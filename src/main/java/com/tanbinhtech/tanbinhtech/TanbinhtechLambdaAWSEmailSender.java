@@ -5,9 +5,9 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import jakarta.mail.MessagingException;
 import java.io.UnsupportedEncodingException;
-
+import java.util.Base64;
+import java.util.Map;
 
 import org.json.JSONObject;
 import software.amazon.awssdk.regions.Region;
@@ -23,12 +23,12 @@ import software.amazon.awssdk.services.sesv2.SesV2Client;
 public class TanbinhtechLambdaAWSEmailSender implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
     public static void sendEmail(JSONObject json)
-            throws UnsupportedEncodingException, MessagingException {
+            throws UnsupportedEncodingException {
 
         try (SesV2Client client = SesV2Client.builder()
                 .region(Region.AP_SOUTHEAST_1) // Ensure region matches where identity is verified
                 .build()) {
-            
+
             Destination destination = Destination.builder()
                     .toAddresses(json.getString("receiver"))
                     .build();
@@ -37,12 +37,11 @@ public class TanbinhtechLambdaAWSEmailSender implements RequestHandler<APIGatewa
                     .data(json.getString("body"))
                     .charset("UTF-8")
                     .build();
-            
+
             //Content htmlContent = Content.builder()
             //        .data(BODY_HTML)
             //        .charset("UTF-8")
             //        .build();
-
             Body body = Body.builder()
                     .text(content)
                     //.html(htmlContent)
@@ -68,7 +67,7 @@ public class TanbinhtechLambdaAWSEmailSender implements RequestHandler<APIGatewa
             System.err.println(e.awsErrorDetails().errorMessage());
             throw new RuntimeException(e);
         }
-    
+
     }
 
     @Override
@@ -102,21 +101,46 @@ public class TanbinhtechLambdaAWSEmailSender implements RequestHandler<APIGatewa
                 message.put("subject", messageSubject);
                 message.put("receiver", messageToUser);
                 message.put("body", messageBody);
-                //message.put("body",
-                //        String.join(System.getProperty("line.separator"), "<h1>" + "MyScholarship" + "</h1>",
-                //                "<p>Please, use the following new credentials to access your account.",
-                //                "http://www.tanbinhtech.com/myscholarship",
-                //                "We recommend you to change your  password as soon as possible.", "<ul>",
-                //                "<li>Email: " + "manuelgclavel@gmail.com", "<li>Password: " + password, "</ul>", "</p>"));
-
+               
                 sendEmail(message);
-            } catch (UnsupportedEncodingException | MessagingException e) {
+                Map<String, String> headersMap;
+                headersMap = Map.of(
+                        "content-type", "text/plain");
+                String responseMessage
+                        = "Email successfully sent";
+
+                JSONObject bodyResponse = new JSONObject();
+                bodyResponse.put("code", 200);
+                bodyResponse.put("message", responseMessage); 
+                
+                return new APIGatewayProxyResponseEvent()
+                        .withStatusCode(200)
+                        .withHeaders(headersMap)
+                        .withBody(bodyResponse.toString())
+                        .withIsBase64Encoded(true);
+
+            } catch (UnsupportedEncodingException e) {
                 logger.log(e.getMessage());
+                Map<String, String> headersMap;
+                headersMap = Map.of(
+                        "content-type", "text/plain");
+
+                String responseMessage
+                        = "Unexpected error when sending the email.";
+
+                JSONObject bodyResponse = new JSONObject();
+                bodyResponse.put("code", 500);
+                bodyResponse.put("message", responseMessage);                
+           
+                return new APIGatewayProxyResponseEvent()
+                        .withStatusCode(500)
+                        .withHeaders(headersMap)
+                        .withBody(bodyResponse.toString())
+                        .withIsBase64Encoded(false);
 
             }
 
         }
-        return null;
 
     }
 
