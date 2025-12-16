@@ -22,8 +22,8 @@ import software.amazon.awssdk.services.sesv2.SesV2Client;
 
 public class TanbinhtechLambdaAWSEmailSender implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
-    public static void sendEmail(JSONObject json)
-            throws UnsupportedEncodingException {
+    public static Integer sendEmail(JSONObject json, LambdaLogger logger) {
+        //throws UnsupportedEncodingException {
 
         try (SesV2Client client = SesV2Client.builder()
                 .region(Region.AP_SOUTHEAST_1) // Ensure region matches where identity is verified
@@ -60,12 +60,14 @@ public class TanbinhtechLambdaAWSEmailSender implements RequestHandler<APIGatewa
                     .build();
 
             client.sendEmail(request);
-            System.out.println("Email sent successfully!");
-            //return "Email Sent";
+            //System.out.println("Email sent successfully!");
+            return 200;
 
         } catch (SesV2Exception e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            throw new RuntimeException(e);
+            //System.err.println(e.awsErrorDetails().errorMessage());
+            //throw new RuntimeException(e);
+            logger.log("Email exception: " + e);
+            return 500;
         }
 
     }
@@ -85,60 +87,42 @@ public class TanbinhtechLambdaAWSEmailSender implements RequestHandler<APIGatewa
                     .singletonMap("Content-Type", "text/plain"));
             return response;
         } else {
+            JSONObject bodyJSON = new JSONObject(requestBody);
 
-            try {
-                JSONObject bodyJSON = new JSONObject(requestBody);
+            String messageToUser = bodyJSON.getString("messageToUser");
+            String messageFromIdentity = bodyJSON.getString("messageFromIdentity");
+            String messageFromApp = bodyJSON.getString("messageFromApp");
+            String messageSubject = bodyJSON.getString("messageSubject");
+            String messageBody = bodyJSON.getString("messageBody");
 
-                String messageToUser = bodyJSON.getString("messageToUser");
-                String messageFromIdentity = bodyJSON.getString("messageFromIdentity");
-                String messageFromApp = bodyJSON.getString("messageFromApp");
-                String messageSubject = bodyJSON.getString("messageSubject");
-                String messageBody = bodyJSON.getString("messageBody");
+            JSONObject message = new JSONObject();
+            message.put("sender", messageFromIdentity);
+            message.put("nameSender", messageFromApp);
+            message.put("subject", messageSubject);
+            message.put("receiver", messageToUser);
+            message.put("body", messageBody);
 
-                JSONObject message = new JSONObject();
-                message.put("sender", messageFromIdentity);
-                message.put("nameSender", messageFromApp);
-                message.put("subject", messageSubject);
-                message.put("receiver", messageToUser);
-                message.put("body", messageBody);
-               
-                sendEmail(message);
-                Map<String, String> headersMap;
-                headersMap = Map.of(
-                        "content-type", "text/plain");
-                String responseMessage
-                        = "Email successfully sent";
-
-                JSONObject bodyResponse = new JSONObject();
-                bodyResponse.put("code", 200);
-                bodyResponse.put("message", responseMessage); 
-                
-                return new APIGatewayProxyResponseEvent()
-                        .withStatusCode(200)
-                        .withHeaders(headersMap)
-                        .withBody(bodyResponse.toString())
-                        .withIsBase64Encoded(true);
-
-            } catch (UnsupportedEncodingException e) {
-                logger.log(e.getMessage());
-                Map<String, String> headersMap;
-                headersMap = Map.of(
-                        "content-type", "text/plain");
-
-                String responseMessage
-                        = "Unexpected error when sending the email.";
-
-                JSONObject bodyResponse = new JSONObject();
-                bodyResponse.put("code", 500);
-                bodyResponse.put("message", responseMessage);                
-           
-                return new APIGatewayProxyResponseEvent()
-                        .withStatusCode(500)
-                        .withHeaders(headersMap)
-                        .withBody(bodyResponse.toString())
-                        .withIsBase64Encoded(false);
-
+            Integer codeSendEmail = sendEmail(message, logger);
+            String messageSendEmail;
+            if (codeSendEmail == 200) {
+                messageSendEmail = "Email successfully sent";
+            } else {
+                messageSendEmail = "Error when sending the email";
             }
+
+            Map<String, String> headersMap;
+            headersMap = Map.of(
+                    "content-type", "application/json");
+
+            JSONObject bodyResponse = new JSONObject();
+            bodyResponse.put("code", codeSendEmail);
+            bodyResponse.put("message", messageSendEmail);
+
+            return new APIGatewayProxyResponseEvent()
+                    .withStatusCode(codeSendEmail)
+                    .withHeaders(headersMap)
+                    .withBody(bodyResponse.toString())
+                    .withIsBase64Encoded(true);
 
         }
 
